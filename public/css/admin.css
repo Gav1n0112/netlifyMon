@@ -202,7 +202,31 @@ body {
 .remove-url-btn:hover {
     background-color: #DC2626;
 }
+/* 卡密状态样式 */
+.status-used {
+    color: #dc2626; /* 红色表示已使用 */
+    font-weight: bold;
+}
 
+.status-unused {
+    color: #16a34a; /* 绿色表示未使用 */
+    font-weight: bold;
+}
+
+.text-expired {
+    color: #9ca3af; /* 灰色表示已过期 */
+    text-decoration: line-through;
+}
+
+.expired-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    background-color: #ef4444;
+    color: white;
+    font-size: 12px;
+    border-radius: 3px;
+}
 /* 生成的卡密容器 */
 .generated-keys-container {
     margin-top: 30px;
