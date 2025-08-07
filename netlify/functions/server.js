@@ -15,14 +15,17 @@ app.use(bodyParser.json());
 app.use('/.netlify/functions/server', router); // 挂载路由
 
 // 配置（从环境变量读取MongoDB连接字符串）
-const JWT_SECRET = 'your-secret-key-here'; // 保持不变
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here'; // 建议从环境变量获取
 const MONGODB_URI = process.env.MONGODB_URI; // 从Netlify环境变量获取
 const client = new MongoClient(MONGODB_URI); // 创建MongoDB客户端
 
 // 连接MongoDB并获取集合（表）
 async function getCollections() {
   try {
-    await client.connect(); // 连接数据库
+    // 避免重复连接
+    if (!client.topology || !client.topology.isConnected()) {
+      await client.connect();
+    }
     const db = client.db(); // 使用连接字符串中指定的数据库
     return {
       software: db.collection('software'), // 软件集合
@@ -225,10 +228,12 @@ router.get('/api/keys', authenticateToken, async (req, res) => {
     const keysList = await keys.find({}).toArray();
     const softwareList = await software.find({}).toArray();
 
-    // 关联软件信息
+    // 关联软件信息并处理使用状态显示
     const keysWithSoftware = keysList.map(key => ({
       ...key,
-      software: softwareList.find(s => s.id === key.softwareId)
+      software: softwareList.find(s => s.id === key.softwareId),
+      // 前端可根据此判断显示"已使用"或"未使用"
+      isUsed: !!key.firstUsedAt
     }));
 
     res.json(keysWithSoftware);
@@ -240,8 +245,8 @@ router.get('/api/keys', authenticateToken, async (req, res) => {
 router.post('/api/keys', authenticateToken, async (req, res) => {
   try {
     const { softwareId, count, validityDays } = req.body;
-    if (!softwareId || !count || count <= 0) {
-      return res.status(400).json({ message: '请选择软件并输入有效的卡密数量' });
+    if (!softwareId || !count || count <= 0 || count > 100) { // 限制最大生成数量
+      return res.status(400).json({ message: '请选择软件并输入有效的卡密数量（1-100）' });
     }
 
     // 验证软件是否存在
@@ -251,7 +256,7 @@ router.post('/api/keys', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: '软件不存在' });
     }
 
-    // 生成卡密并插入MongoDB（添加firstUsedAt字段）
+    // 生成卡密并插入MongoDB
     const newKeys = [];
     for (let i = 0; i < count; i++) {
       const keyCode = generateFormattedKey();
@@ -259,7 +264,7 @@ router.post('/api/keys', authenticateToken, async (req, res) => {
         id: uuidv4(),
         code: keyCode,
         softwareId,
-        firstUsedAt: null, // 新增：首次使用时间，初始为null
+        firstUsedAt: null, // 首次使用时间（未使用为null）
         createdAt: new Date().toISOString(),
         validUntil: validityDays ? new Date(Date.now() + validityDays * 86400000).toISOString() : null
       };
@@ -286,7 +291,7 @@ router.delete('/api/keys/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// 验证卡密接口（修改为首次使用标记，不限制后续使用）
+// 验证卡密接口（核心修改：记录首次使用时间，不影响有效期）
 router.post('/api/verify-key', async (req, res) => {
   try {
     const { code } = req.body;
@@ -297,18 +302,16 @@ router.post('/api/verify-key', async (req, res) => {
 
     if (!key) return res.status(404).json({ message: '卡密不存在', valid: false });
     
-    // 检查是否过期
+    // 检查是否过期（仅验证，不修改有效期）
     if (key.validUntil && new Date(key.validUntil) < new Date()) {
       return res.json({ message: '卡密已过期', valid: false, expired: true });
     }
 
-    // 首次使用时标记（只更新firstUsedAt，不设置used字段）
+    // 首次使用时更新状态（只标记首次使用时间，不限制后续使用）
     if (!key.firstUsedAt) {
       await keys.updateOne(
         { id: key.id },
-        { $set: { 
-          firstUsedAt: new Date().toISOString() // 记录首次使用时间
-        }}
+        { $set: { firstUsedAt: new Date().toISOString() } }
       );
     }
 
@@ -318,10 +321,11 @@ router.post('/api/verify-key', async (req, res) => {
       valid: true, 
       message: key.firstUsedAt ? '卡密有效' : '首次使用验证成功',
       software: softwareInfo,
-      validUntil: key.validUntil,
-      firstUsedAt: key.firstUsedAt || new Date().toISOString() // 返回首次使用时间
+      validUntil: key.validUntil, // 返回原有效期
+      firstUsedAt: key.firstUsedAt || new Date().toISOString()
     });
   } catch (error) {
+    console.error('卡密验证错误:', error); // 增加错误日志便于调试
     res.status(500).json({ message: '服务器错误' });
   }
 });
