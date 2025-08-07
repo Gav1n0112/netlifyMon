@@ -287,42 +287,29 @@ router.delete('/api/keys/:id', authenticateToken, async (req, res) => {
 });
 
 // 验证卡密接口
-// 卡密验证接口（添加状态更新逻辑）
 router.post('/api/verify-key', async (req, res) => {
   try {
     const { code } = req.body;
     if (!code) return res.status(400).json({ message: '请提供卡密' });
 
     const { keys, software } = await getCollections();
-    const key = await keys.findOne({ code: code.trim() });
+    const key = await keys.findOne({ code: code.trim() }); // 从MongoDB查询卡密
 
-    // 卡密不存在
     if (!key) return res.status(404).json({ message: '卡密不存在', valid: false });
-    // 卡密已使用
     if (key.used) return res.json({ message: '卡密已使用', valid: false, used: true });
-    // 卡密已过期
     if (key.validUntil && new Date(key.validUntil) < new Date()) {
       return res.json({ message: '卡密已过期', valid: false, expired: true });
     }
 
-    // 核心修复：验证成功后，将卡密标记为“已使用”
-    await keys.updateOne(
-      { _id: key._id }, // 注意：MongoDB默认主键是_id，根据实际字段调整
-      { $set: { 
-        used: true,       // 标记为已使用
-        usedAt: new Date().toISOString() // 记录使用时间（可选）
-      }}
-    );
-
-    // 返回软件信息（保持原有逻辑）
-    const softwareInfo = await software.findOne({ _id: key.softwareId });
-    res.json({
-      valid: true,
+    // 获取软件信息
+    const softwareInfo = await software.findOne({ id: key.softwareId });
+    res.json({ 
+      valid: true, 
+      message: '卡密有效',
       software: softwareInfo,
-      message: '卡密验证成功'
+      validUntil: key.validUntil
     });
   } catch (error) {
-    console.error('验证卡密错误:', error);
     res.status(500).json({ message: '服务器错误' });
   }
 });
