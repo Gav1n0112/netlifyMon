@@ -293,21 +293,28 @@ router.post('/api/verify-key', async (req, res) => {
     if (!code) return res.status(400).json({ message: '请提供卡密' });
 
     const { keys, software } = await getCollections();
-    const key = await keys.findOne({ code: code.trim() }); // 从MongoDB查询卡密
+    const key = await keys.findOne({ code: code.trim() });
 
     if (!key) return res.status(404).json({ message: '卡密不存在', valid: false });
     if (key.used) return res.json({ message: '卡密已使用', valid: false, used: true });
+
+    // 检查是否过期
     if (key.validUntil && new Date(key.validUntil) < new Date()) {
       return res.json({ message: '卡密已过期', valid: false, expired: true });
     }
 
-    // 获取软件信息
+    // 关键修复：验证成功后，将卡密标记为已使用
+    await keys.updateOne(
+      { id: key.id },
+      { $set: { used: true, usedAt: new Date().toISOString() } }
+    );
+
+    // 获取关联的软件信息并返回
     const softwareInfo = await software.findOne({ id: key.softwareId });
-    res.json({ 
-      valid: true, 
-      message: '卡密有效',
+    res.json({
+      valid: true,
       software: softwareInfo,
-      validUntil: key.validUntil
+      message: '卡密验证成功'
     });
   } catch (error) {
     res.status(500).json({ message: '服务器错误' });
