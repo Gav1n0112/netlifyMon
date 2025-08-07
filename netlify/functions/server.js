@@ -286,7 +286,7 @@ router.delete('/api/keys/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// 验证卡密接口
+// 验证卡密接口（已修复：添加状态更新逻辑）
 router.post('/api/verify-key', async (req, res) => {
   try {
     const { code } = req.body;
@@ -300,6 +300,15 @@ router.post('/api/verify-key', async (req, res) => {
     if (key.validUntil && new Date(key.validUntil) < new Date()) {
       return res.json({ message: '卡密已过期', valid: false, expired: true });
     }
+
+    // 核心修复：验证成功后，将卡密标记为已使用
+    await keys.updateOne(
+      { id: key.id },
+      { $set: { 
+        used: true, 
+        usedAt: new Date().toISOString() // 记录使用时间（可选）
+      }}
+    );
 
     // 获取软件信息
     const softwareInfo = await software.findOne({ id: key.softwareId });
