@@ -251,7 +251,7 @@ router.post('/api/keys', authenticateToken, async (req, res) => {
       return res.status(404).json({ message: '软件不存在' });
     }
 
-    // 生成卡密并插入MongoDB
+    // 生成卡密并插入MongoDB（添加firstUsedAt字段）
     const newKeys = [];
     for (let i = 0; i < count; i++) {
       const keyCode = generateFormattedKey();
@@ -259,7 +259,7 @@ router.post('/api/keys', authenticateToken, async (req, res) => {
         id: uuidv4(),
         code: keyCode,
         softwareId,
-        used: false,
+        firstUsedAt: null, // 新增：首次使用时间，初始为null
         createdAt: new Date().toISOString(),
         validUntil: validityDays ? new Date(Date.now() + validityDays * 86400000).toISOString() : null
       };
@@ -286,7 +286,7 @@ router.delete('/api/keys/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// 验证卡密接口（已修复：添加状态更新逻辑）
+// 验证卡密接口（修改为首次使用标记，不限制后续使用）
 router.post('/api/verify-key', async (req, res) => {
   try {
     const { code } = req.body;
@@ -296,27 +296,30 @@ router.post('/api/verify-key', async (req, res) => {
     const key = await keys.findOne({ code: code.trim() }); // 从MongoDB查询卡密
 
     if (!key) return res.status(404).json({ message: '卡密不存在', valid: false });
-    if (key.used) return res.json({ message: '卡密已使用', valid: false, used: true });
+    
+    // 检查是否过期
     if (key.validUntil && new Date(key.validUntil) < new Date()) {
       return res.json({ message: '卡密已过期', valid: false, expired: true });
     }
 
-    // 核心修复：验证成功后，将卡密标记为已使用
-    await keys.updateOne(
-      { id: key.id },
-      { $set: { 
-        used: true, 
-        usedAt: new Date().toISOString() // 记录使用时间（可选）
-      }}
-    );
+    // 首次使用时标记（只更新firstUsedAt，不设置used字段）
+    if (!key.firstUsedAt) {
+      await keys.updateOne(
+        { id: key.id },
+        { $set: { 
+          firstUsedAt: new Date().toISOString() // 记录首次使用时间
+        }}
+      );
+    }
 
     // 获取软件信息
     const softwareInfo = await software.findOne({ id: key.softwareId });
     res.json({ 
       valid: true, 
-      message: '卡密有效',
+      message: key.firstUsedAt ? '卡密有效' : '首次使用验证成功',
       software: softwareInfo,
-      validUntil: key.validUntil
+      validUntil: key.validUntil,
+      firstUsedAt: key.firstUsedAt || new Date().toISOString() // 返回首次使用时间
     });
   } catch (error) {
     res.status(500).json({ message: '服务器错误' });
