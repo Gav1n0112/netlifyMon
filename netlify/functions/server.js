@@ -5,32 +5,28 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const serverless = require('serverless-http');
-const { MongoClient } = require('mongodb'); // 引入MongoDB客户端
+const { MongoClient } = require('mongodb');
 
-// 初始化Express
 const app = express();
 const router = express.Router();
 app.use(cors({ origin: '*' }));
 app.use(bodyParser.json());
-app.use('/.netlify/functions/server', router); // 挂载路由
+app.use('/.netlify/functions/server', router);
 
-// 配置（从环境变量读取MongoDB连接字符串）
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here'; // 建议从环境变量获取
-const MONGODB_URI = process.env.MONGODB_URI; // 从Netlify环境变量获取
-const client = new MongoClient(MONGODB_URI); // 创建MongoDB客户端
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
+const MONGODB_URI = process.env.MONGODB_URI;
+const client = new MongoClient(MONGODB_URI);
 
-// 连接MongoDB并获取集合（表）
 async function getCollections() {
   try {
-    // 避免重复连接
     if (!client.topology || !client.topology.isConnected()) {
       await client.connect();
     }
-    const db = client.db(); // 使用连接字符串中指定的数据库
+    const db = client.db();
     return {
-      software: db.collection('software'), // 软件集合
-      keys: db.collection('keys'), // 卡密集合
-      user: db.collection('user') // 管理员集合
+      software: db.collection('software'),
+      keys: db.collection('keys'),
+      user: db.collection('user')
     };
   } catch (error) {
     console.error('MongoDB连接失败:', error.message);
@@ -38,12 +34,10 @@ async function getCollections() {
   }
 }
 
-// 初始化管理员账号（首次运行时自动创建）
 async function initAdmin() {
   const { user } = await getCollections();
   const existingUser = await user.findOne({});
   if (!existingUser) {
-    // 初始管理员账号：admin / password
     await user.insertOne({
       username: 'admin',
       password: hashPassword('password'),
@@ -54,7 +48,6 @@ async function initAdmin() {
 }
 initAdmin().catch(err => console.error('初始化管理员失败:', err));
 
-// 工具函数（密码加密/验证）
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
@@ -67,12 +60,10 @@ function verifyPassword(password, hashedPassword) {
   return newHash === hash;
 }
 
-// 生成JWT令牌
 function generateToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '24h' });
 }
 
-// 验证令牌中间件
 function authenticateToken(req, res, next) {
   try {
     const authHeader = req.headers['authorization'];
@@ -89,11 +80,9 @@ function authenticateToken(req, res, next) {
   }
 }
 
-// 生成卡密（ABCD-EFGH-IJKL-NMOP格式）
 function generateFormattedKey() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let key = '';
-  // 4-4-4-4结构
   for (let i = 0; i < 4; i++) key += chars[Math.floor(Math.random() * chars.length)];
   key += '-';
   for (let i = 0; i < 4; i++) key += chars[Math.floor(Math.random() * chars.length)];
@@ -104,7 +93,6 @@ function generateFormattedKey() {
   return key;
 }
 
-// 登录接口
 router.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -122,7 +110,6 @@ router.post('/api/login', async (req, res) => {
   }
 });
 
-// 修改密码接口
 router.post('/api/change-password', authenticateToken, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -146,11 +133,10 @@ router.post('/api/change-password', authenticateToken, async (req, res) => {
   }
 });
 
-// 软件相关接口
 router.get('/api/software', authenticateToken, async (req, res) => {
   try {
     const { software } = await getCollections();
-    const list = await software.find({}).toArray(); // 从MongoDB查询
+    const list = await software.find({}).toArray();
     res.json(list);
   } catch (error) {
     res.status(500).json({ message: '获取软件列表失败' });
@@ -173,7 +159,7 @@ router.post('/api/software', authenticateToken, async (req, res) => {
     };
 
     const { software } = await getCollections();
-    await software.insertOne(newSoftware); // 插入MongoDB
+    await software.insertOne(newSoftware);
     res.json(newSoftware);
   } catch (error) {
     res.status(500).json({ message: '服务器错误' });
@@ -192,7 +178,7 @@ router.put('/api/software/:id', authenticateToken, async (req, res) => {
     const updated = await software.findOneAndUpdate(
       { id: softwareId },
       { $set: { name, fileType, downloadUrls, updatedAt: new Date().toISOString() } },
-      { returnDocument: 'after' } // 返回更新后的文档
+      { returnDocument: 'after' }
     );
 
     if (!updated) return res.status(404).json({ message: '软件不存在' });
@@ -207,13 +193,11 @@ router.delete('/api/software/:id', authenticateToken, async (req, res) => {
     const softwareId = req.params.id;
     const { software, keys } = await getCollections();
 
-    // 删除软件
     const deletedSoftware = await software.deleteOne({ id: softwareId });
     if (deletedSoftware.deletedCount === 0) {
       return res.status(404).json({ message: '软件不存在' });
     }
 
-    // 删除关联卡密
     await keys.deleteMany({ softwareId });
     res.json({ message: '软件删除成功' });
   } catch (error) {
@@ -221,19 +205,17 @@ router.delete('/api/software/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// 卡密相关接口
 router.get('/api/keys', authenticateToken, async (req, res) => {
   try {
     const { keys, software } = await getCollections();
     const keysList = await keys.find({}).toArray();
     const softwareList = await software.find({}).toArray();
 
-    // 关联软件信息并处理使用状态显示
+    // 关键修改：统一使用firstUsedAt判断是否已使用
     const keysWithSoftware = keysList.map(key => ({
       ...key,
       software: softwareList.find(s => s.id === key.softwareId),
-      // 前端可根据此判断显示"已使用"或"未使用"
-      isUsed: !!key.firstUsedAt
+      used: !!key.firstUsedAt // 前端通过该字段显示状态
     }));
 
     res.json(keysWithSoftware);
@@ -245,18 +227,16 @@ router.get('/api/keys', authenticateToken, async (req, res) => {
 router.post('/api/keys', authenticateToken, async (req, res) => {
   try {
     const { softwareId, count, validityDays } = req.body;
-    if (!softwareId || !count || count <= 0 || count > 100) { // 限制最大生成数量
+    if (!softwareId || !count || count <= 0 || count > 100) {
       return res.status(400).json({ message: '请选择软件并输入有效的卡密数量（1-100）' });
     }
 
-    // 验证软件是否存在
     const { software, keys } = await getCollections();
     const softwareExists = await software.findOne({ id: softwareId });
     if (!softwareExists) {
       return res.status(404).json({ message: '软件不存在' });
     }
 
-    // 生成卡密并插入MongoDB
     const newKeys = [];
     for (let i = 0; i < count; i++) {
       const keyCode = generateFormattedKey();
@@ -264,14 +244,14 @@ router.post('/api/keys', authenticateToken, async (req, res) => {
         id: uuidv4(),
         code: keyCode,
         softwareId,
-        firstUsedAt: null, // 首次使用时间（未使用为null）
+        firstUsedAt: null, // 初始化为未使用
         createdAt: new Date().toISOString(),
         validUntil: validityDays ? new Date(Date.now() + validityDays * 86400000).toISOString() : null
       };
       newKeys.push(newKey);
     }
 
-    await keys.insertMany(newKeys); // 批量插入
+    await keys.insertMany(newKeys);
     res.json({ keys: newKeys });
   } catch (error) {
     res.status(500).json({ message: '服务器错误' });
@@ -291,44 +271,42 @@ router.delete('/api/keys/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// 验证卡密接口（核心修改：记录首次使用时间，不影响有效期）
+// 验证卡密接口（核心修改：确保首次使用后标记状态）
 router.post('/api/verify-key', async (req, res) => {
   try {
     const { code } = req.body;
     if (!code) return res.status(400).json({ message: '请提供卡密' });
 
     const { keys, software } = await getCollections();
-    const key = await keys.findOne({ code: code.trim() }); // 从MongoDB查询卡密
+    const key = await keys.findOne({ code: code.trim() });
 
     if (!key) return res.status(404).json({ message: '卡密不存在', valid: false });
     
-    // 检查是否过期（仅验证，不修改有效期）
+    // 检查过期（不修改有效期）
     if (key.validUntil && new Date(key.validUntil) < new Date()) {
       return res.json({ message: '卡密已过期', valid: false, expired: true });
     }
 
-    // 首次使用时更新状态（只标记首次使用时间，不限制后续使用）
+    // 首次使用时更新状态（关键逻辑）
     if (!key.firstUsedAt) {
       await keys.updateOne(
         { id: key.id },
-        { $set: { firstUsedAt: new Date().toISOString() } }
+        { $set: { firstUsedAt: new Date().toISOString() } } // 仅记录使用时间
       );
     }
 
-    // 获取软件信息
     const softwareInfo = await software.findOne({ id: key.softwareId });
     res.json({ 
       valid: true, 
       message: key.firstUsedAt ? '卡密有效' : '首次使用验证成功',
       software: softwareInfo,
-      validUntil: key.validUntil, // 返回原有效期
+      validUntil: key.validUntil, // 保留原始有效期
       firstUsedAt: key.firstUsedAt || new Date().toISOString()
     });
   } catch (error) {
-    console.error('卡密验证错误:', error); // 增加错误日志便于调试
+    console.error('卡密验证错误:', error);
     res.status(500).json({ message: '服务器错误' });
   }
 });
 
-// 导出Netlify处理器
 module.exports.handler = serverless(app);
