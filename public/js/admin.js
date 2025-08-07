@@ -1,12 +1,10 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // 检查用户是否已登录，如果未登录则跳转到登录页面
     const token = localStorage.getItem('token');
     if (!token) {
         window.location.href = 'login.html';
         return;
     }
 
-    // 页面元素
     const sectionHeaders = document.querySelectorAll('.section-header');
     const softwareForm = document.getElementById('softwareForm');
     const keyForm = document.getElementById('keyForm');
@@ -28,10 +26,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const closeModalBtns = document.querySelectorAll('.close-modal, .close-modal-btn');
     const changePasswordForm = document.getElementById('changePasswordForm');
     const toast = document.getElementById('toast');
-    const API_BASE = '/.netlify/functions/server'; // 基础路径（关键）
+    const API_BASE = '/.netlify/functions/server';
     const toastMessage = document.getElementById('toastMessage');
 
-    // 分页设置
     const itemsPerPage = 5;
     let currentSoftwarePage = 1;
     let currentKeyPage = 1;
@@ -40,22 +37,15 @@ document.addEventListener('DOMContentLoaded', function() {
     let filteredSoftware = [];
     let filteredKeys = [];
 
-    // 初始化页面
     init();
 
-    // 初始化函数
     function init() {
-        // 加载软件列表
         loadSoftware();
-        // 加载卡密列表
         loadKeys();
-        // 设置事件监听器
         setupEventListeners();
     }
 
-    // 设置事件监听器
     function setupEventListeners() {
-        // 部分折叠/展开功能
         sectionHeaders.forEach(header => {
             header.addEventListener('click', function() {
                 const content = this.nextElementSibling;
@@ -71,69 +61,39 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 添加更多下载地址
         addUrlBtn.addEventListener('click', addDownloadUrlField);
-
-        // 提交软件表单
         softwareForm.addEventListener('submit', function(e) {
             e.preventDefault();
             saveSoftware();
         });
-
-        // 提交卡密生成表单
         keyForm.addEventListener('submit', function(e) {
             e.preventDefault();
             generateKeys();
         });
-
-        // 复制所有卡密
         copyKeysBtn.addEventListener('click', copyAllKeys);
-
-        // 软件搜索
-        softwareSearch.addEventListener('input', function() {
-            filterSoftwareList();
-        });
-
-        // 卡密搜索
-        keySearch.addEventListener('input', function() {
-            filterKeyList();
-        });
-
-        // 按软件筛选卡密
-        filterSoftware.addEventListener('change', function() {
-            filterKeyList();
-        });
-
-        // 修改密码按钮
+        softwareSearch.addEventListener('input', filterSoftwareList);
+        keySearch.addEventListener('input', filterKeyList);
+        filterSoftware.addEventListener('change', filterKeyList);
         changePasswordBtn.addEventListener('click', function() {
             changePasswordModal.style.display = 'flex';
         });
-
-        // 关闭模态框
         closeModalBtns.forEach(btn => {
             btn.addEventListener('click', function() {
                 changePasswordModal.style.display = 'none';
             });
         });
-
-        // 点击模态框外部关闭
         window.addEventListener('click', function(e) {
             if (e.target === changePasswordModal) {
                 changePasswordModal.style.display = 'none';
             }
         });
-
-        // 提交密码修改表单
         changePasswordForm.addEventListener('submit', function(e) {
             e.preventDefault();
             changePassword();
         });
-
-        // 退出登录
         logoutBtn.addEventListener('click', logout);
     }
 
-    // 添加下载地址输入框
     function addDownloadUrlField() {
         const urlGroups = document.querySelectorAll('.download-url-group');
         const newIndex = urlGroups.length + 1;
@@ -152,16 +112,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         downloadUrlsContainer.appendChild(urlGroup);
 
-        // 添加删除按钮事件
         const removeBtn = urlGroup.querySelector('.remove-url-btn');
         removeBtn.addEventListener('click', function() {
             urlGroup.remove();
-            // 重新编号
             renumberUrlFields();
         });
     }
 
-    // 重新编号下载地址输入框
     function renumberUrlFields() {
         const urlGroups = document.querySelectorAll('.download-url-group');
         urlGroups.forEach((group, index) => {
@@ -175,7 +132,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 保存软件
     function saveSoftware() {
         const softwareName = document.getElementById('softwareName').value;
         const fileType = document.getElementById('fileType').value;
@@ -189,7 +145,6 @@ document.addEventListener('DOMContentLoaded', function() {
             downloadUrls: downloadUrls
         };
 
-        // 修复：添加API_BASE前缀
         fetch(`${API_BASE}/api/software`, {
             method: 'POST',
             headers: {
@@ -209,12 +164,10 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             showToast('软件保存成功', 'success');
             softwareForm.reset();
-            // 重置下载地址输入框，只保留一个
             while (downloadUrlsContainer.children.length > 1) {
                 downloadUrlsContainer.removeChild(downloadUrlsContainer.lastChild);
             }
             downloadUrlsContainer.querySelector('input').value = '';
-            // 重新加载软件列表
             loadSoftware();
         })
         .catch(error => {
@@ -222,9 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 加载软件列表
     function loadSoftware() {
-        // 已修复：使用API_BASE
         fetch(API_BASE + '/api/software', {
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -233,7 +184,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => {
             if (!response.ok) {
                 if (response.status === 401) {
-                    // 未授权，跳转到登录页面
                     logout();
                     return;
                 }
@@ -246,9 +196,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             allSoftware = data;
             filteredSoftware = [...allSoftware];
-            // 更新软件下拉列表
             updateSoftwareDropdowns();
-            // 显示软件列表
             displaySoftwareList();
         })
         .catch(error => {
@@ -256,9 +204,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 更新软件下拉列表
     function updateSoftwareDropdowns() {
-        // 清空现有选项（保留第一个提示选项）
         while (selectSoftware.options.length > 1) {
             selectSoftware.remove(1);
         }
@@ -267,7 +213,6 @@ document.addEventListener('DOMContentLoaded', function() {
             filterSoftware.remove(1);
         }
 
-        // 添加新选项
         allSoftware.forEach(software => {
             const option1 = document.createElement('option');
             option1.value = software.id;
@@ -281,7 +226,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 筛选软件列表
     function filterSoftwareList() {
         const searchTerm = softwareSearch.value.toLowerCase();
         filteredSoftware = allSoftware.filter(software => 
@@ -291,7 +235,6 @@ document.addEventListener('DOMContentLoaded', function() {
         displaySoftwareList();
     }
 
-    // 显示软件列表
     function displaySoftwareList() {
         const totalPages = Math.ceil(filteredSoftware.length / itemsPerPage);
         const startIndex = (currentSoftwarePage - 1) * itemsPerPage;
@@ -342,41 +285,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
             softwareList.appendChild(softwareItem);
 
-            // 添加删除软件事件
             softwareItem.querySelector('.btn-delete-software').addEventListener('click', function() {
                 const softwareId = this.getAttribute('data-id');
                 deleteSoftware(softwareId);
             });
 
-            // 添加编辑软件事件
             softwareItem.querySelector('.btn-edit-software').addEventListener('click', function() {
                 const softwareId = this.getAttribute('data-id');
                 editSoftware(softwareId);
             });
         });
 
-        // 生成分页控件
         generatePagination(softwarePagination, totalPages, currentSoftwarePage, function(page) {
             currentSoftwarePage = page;
             displaySoftwareList();
         });
     }
 
-    // 编辑软件
     function editSoftware(softwareId) {
         const software = allSoftware.find(s => s.id === softwareId);
         if (!software) return;
 
-        // 填充表单
         document.getElementById('softwareName').value = software.name;
         document.getElementById('fileType').value = software.fileType;
 
-        // 清空现有下载地址输入框
         while (downloadUrlsContainer.firstChild) {
             downloadUrlsContainer.removeChild(downloadUrlsContainer.firstChild);
         }
 
-        // 添加下载地址输入框
         software.downloadUrls.forEach((url, index) => {
             const urlGroup = document.createElement('div');
             urlGroup.className = 'form-group download-url-group';
@@ -394,7 +330,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             downloadUrlsContainer.appendChild(urlGroup);
 
-            // 非第一个添加删除按钮事件
             if (!isFirst) {
                 const removeBtn = urlGroup.querySelector('.remove-url-btn');
                 removeBtn.addEventListener('click', function() {
@@ -404,7 +339,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 修改表单提交事件处理
         const originalSubmitHandler = softwareForm.onsubmit;
         softwareForm.onsubmit = function(e) {
             e.preventDefault();
@@ -421,7 +355,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 downloadUrls: downloadUrls
             };
 
-            // 修复：添加API_BASE前缀
             fetch(`${API_BASE}/api/software/${softwareId}`, {
                 method: 'PUT',
                 headers: {
@@ -440,37 +373,29 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(data => {
                 showToast('软件更新成功', 'success');
-                // 恢复原始提交处理函数
                 softwareForm.onsubmit = originalSubmitHandler;
-                // 重置表单
                 softwareForm.reset();
                 while (downloadUrlsContainer.children.length > 1) {
                     downloadUrlsContainer.removeChild(downloadUrlsContainer.lastChild);
                 }
                 downloadUrlsContainer.querySelector('input').value = '';
-                // 重新加载软件列表
                 loadSoftware();
             })
             .catch(error => {
                 showToast(error.message, 'error');
-                // 恢复原始提交处理函数
                 softwareForm.onsubmit = originalSubmitHandler;
             });
         };
 
-        // 滚动到软件表单
         document.getElementById('softwareSectionHeader').scrollIntoView({ behavior: 'smooth' });
-        // 确保软件部分是展开的
         const softwareContent = document.getElementById('softwareSectionContent');
         const softwareIcon = document.getElementById('softwareSectionHeader').querySelector('.toggle-icon');
         softwareContent.style.display = 'block';
         softwareIcon.classList.add('rotate');
     }
 
-    // 删除软件
     function deleteSoftware(softwareId) {
         if (confirm('确定要删除这个软件吗？相关的卡密也会被删除。')) {
-            // 修复：添加API_BASE前缀
             fetch(`${API_BASE}/api/software/${softwareId}`, {
                 method: 'DELETE',
                 headers: {
@@ -487,7 +412,6 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(data => {
                 showToast('软件删除成功', 'success');
-                // 重新加载软件和卡密列表
                 loadSoftware();
                 loadKeys();
             })
@@ -497,7 +421,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 生成卡密
     function generateKeys() {
         const softwareId = selectSoftware.value;
         const keyCount = parseInt(document.getElementById('keyCount').value);
@@ -508,7 +431,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // 已修复：使用API_BASE
         fetch(`${API_BASE}/api/keys`, {
             method: 'POST',
             headers: {
@@ -531,9 +453,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(data => {
             showToast(`成功生成 ${data.keys.length} 个卡密`, 'success');
-            // 显示生成的卡密
             displayGeneratedKeys(data.keys);
-            // 重新加载卡密列表
             loadKeys();
         })
         .catch(error => {
@@ -541,7 +461,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 显示生成的卡密
     function displayGeneratedKeys(keys) {
         generatedKeysList.innerHTML = '';
 
@@ -556,7 +475,6 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
             generatedKeysList.appendChild(keyItem);
 
-            // 添加复制单个卡密事件
             keyItem.querySelector('.copy-key-btn').addEventListener('click', function() {
                 const keyCode = this.getAttribute('data-key');
                 copyToClipboard(keyCode);
@@ -564,13 +482,10 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 显示复制所有卡密按钮
         copyKeysBtn.style.display = 'block';
-        // 滚动到生成的卡密区域
         generatedKeysList.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    // 复制所有卡密
     function copyAllKeys() {
         const keyElements = document.querySelectorAll('.key-item');
         const keys = Array.from(keyElements).map(el => el.firstChild.textContent.trim()).join('\n');
@@ -579,16 +494,13 @@ document.addEventListener('DOMContentLoaded', function() {
         showToast('所有卡密已复制', 'success');
     }
 
-    // 复制到剪贴板
     function copyToClipboard(text) {
         navigator.clipboard.writeText(text).catch(err => {
             console.error('无法复制文本: ', err);
         });
     }
 
-    // 加载卡密列表
     function loadKeys() {
-        // 修复：添加API_BASE前缀
         fetch(`${API_BASE}/api/keys`, {
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -597,7 +509,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => {
             if (!response.ok) {
                 if (response.status === 401) {
-                    // 未授权，跳转到登录页面
                     logout();
                     return;
                 }
@@ -610,7 +521,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             allKeys = data;
             filteredKeys = [...allKeys];
-            // 显示卡密列表
             displayKeyList();
         })
         .catch(error => {
@@ -618,7 +528,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 筛选卡密列表
     function filterKeyList() {
         const searchTerm = keySearch.value.toLowerCase();
         const softwareFilter = filterSoftware.value;
@@ -634,7 +543,7 @@ document.addEventListener('DOMContentLoaded', function() {
         displayKeyList();
     }
 
-    // 显示卡密列表
+    // 关键修改：优化卡密状态显示
     function displayKeyList() {
         const totalPages = Math.ceil(filteredKeys.length / itemsPerPage);
         const startIndex = (currentKeyPage - 1) * itemsPerPage;
@@ -676,6 +585,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
             }
 
+            // 关键修改：添加使用时间显示和状态样式
+            const usedStatus = key.used ? 
+                `<span class="status-used">已使用</span>` : 
+                `<span class="status-unused">未使用</span>`;
+
+            const usedTimeText = key.firstUsedAt ? 
+                `<div class="key-detail-item">
+                    <strong>使用时间:</strong>
+                    <div class="key-code">${formatDate(new Date(key.firstUsedAt))}</div>
+                </div>` : '';
+
             keyItem.innerHTML = `
                 <div class="key-header">
                     <div class="software-name">${key.software ? key.software.name : '未知软件'}</div>
@@ -701,21 +621,20 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="key-detail-item">
                             <strong>状态:</strong>
-                            <div class="key-code">${key.used ? '已使用' : '未使用'}</div>
+                            <div class="key-code">${usedStatus}</div>
                         </div>
+                        ${usedTimeText}
                     </div>
                 </div>
             `;
 
             keyList.appendChild(keyItem);
 
-            // 添加删除卡密事件
             keyItem.querySelector('.btn-delete-key').addEventListener('click', function() {
                 const keyId = this.getAttribute('data-id');
                 deleteKey(keyId);
             });
 
-            // 添加复制卡密事件
             keyItem.querySelector('.btn-copy-key').addEventListener('click', function() {
                 const keyCode = this.getAttribute('data-key');
                 copyToClipboard(keyCode);
@@ -723,17 +642,14 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 生成分页控件
         generatePagination(keyPagination, totalPages, currentKeyPage, function(page) {
             currentKeyPage = page;
             displayKeyList();
         });
     }
 
-    // 删除卡密
     function deleteKey(keyId) {
         if (confirm('确定要删除这个卡密吗？')) {
-            // 修复：添加API_BASE前缀
             fetch(`${API_BASE}/api/keys/${keyId}`, {
                 method: 'DELETE',
                 headers: {
@@ -750,7 +666,6 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(data => {
                 showToast('卡密删除成功', 'success');
-                // 重新加载卡密列表
                 loadKeys();
             })
             .catch(error => {
@@ -759,7 +674,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 生成分页控件
     function generatePagination(container, totalPages, currentPage, onPageChange) {
         container.innerHTML = '';
 
@@ -767,7 +681,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // 上一页按钮
         const prevBtn = document.createElement('button');
         prevBtn.className = 'page-btn';
         prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
@@ -779,9 +692,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         container.appendChild(prevBtn);
 
-        // 页码按钮
         for (let i = 1; i <= totalPages; i++) {
-            // 只显示当前页附近的页码
             if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= 1) {
                 const pageBtn = document.createElement('button');
                 pageBtn.className = `page-btn ${i === currentPage ? 'active' : ''}`;
@@ -789,13 +700,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 pageBtn.addEventListener('click', () => onPageChange(i));
                 container.appendChild(pageBtn);
             } else if (i === 2 && currentPage > 3) {
-                // 添加省略号
                 const ellipsis = document.createElement('span');
                 ellipsis.className = 'pagination-ellipsis';
                 ellipsis.textContent = '...';
                 container.appendChild(ellipsis);
             } else if (i === totalPages - 1 && currentPage < totalPages - 2) {
-                // 添加省略号
                 const ellipsis = document.createElement('span');
                 ellipsis.className = 'pagination-ellipsis';
                 ellipsis.textContent = '...';
@@ -803,7 +712,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // 下一页按钮
         const nextBtn = document.createElement('button');
         nextBtn.className = 'page-btn';
         nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
@@ -816,13 +724,11 @@ document.addEventListener('DOMContentLoaded', function() {
         container.appendChild(nextBtn);
     }
 
-    // 修改密码
     function changePassword() {
         const currentPassword = document.getElementById('currentPassword').value;
         const newPassword = document.getElementById('newPassword').value;
         const confirmPassword = document.getElementById('confirmPassword').value;
 
-        // 验证密码
         if (newPassword !== confirmPassword) {
             showToast('两次输入的新密码不一致', 'error');
             return;
@@ -833,7 +739,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // 修复：添加API_BASE前缀
         fetch(`${API_BASE}/api/change-password`, {
             method: 'POST',
             headers: {
@@ -855,10 +760,8 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(data => {
             showToast('密码修改成功，请重新登录', 'success');
-            // 关闭模态框并重置表单
             changePasswordModal.style.display = 'none';
             changePasswordForm.reset();
-            // 退出登录
             setTimeout(logout, 1500);
         })
         .catch(error => {
@@ -866,13 +769,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 退出登录
     function logout() {
         localStorage.removeItem('token');
         window.location.href = 'login.html';
     }
 
-    // 显示提示消息
     function showToast(message, type = 'info') {
         toastMessage.textContent = message;
         toast.className = 'toast';
@@ -884,7 +785,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 3000);
     }
 
-    // 格式化日期
     function formatDate(date) {
         return date.toLocaleString('zh-CN', {
             year: 'numeric',
@@ -896,4 +796,3 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
-    
